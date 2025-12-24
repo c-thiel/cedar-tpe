@@ -1,0 +1,28 @@
+namespace MyApp {
+  entity User in [Role];
+
+  entity Role in [Role] = {
+    // Reference to the project this role belongs to
+    "project": Project,
+  };
+
+  entity Server;
+
+  entity Project in [Server];
+
+  // ---------- Server Actions ----------
+  action "ServerActions";
+  action CreateProject, GetServerMetadata in ["ServerActions"]
+    appliesTo {
+      principal: [User, Role],
+      resource: [Server]
+    };
+
+  // ---------- Project Actions ----------
+  action "ProjectActions";
+  action GetProjectMetadata, DeleteProject in ["ProjectActions"]
+    appliesTo {
+      principal: [User, Role],
+      resource: [Project]
+    };
+}
