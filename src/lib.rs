@@ -87,6 +87,8 @@ permit (
 );
 "#;
 
+    // All existing entities with any relationship to the queried resource (MyApp::Project::"0").
+    // Additional entities for which policies exist are not included.
     const SAMPLE_ENTITIES: &str = r#"
 [
     {
