@@ -44,20 +44,20 @@ permit (
     action == MyApp::Action::"DeleteProject",
     resource
 );
-// 3 - As expected: Not returned as "may be determining" as project 0 is not in server 1.
+// 3 - As expected: Not returned as "may be determining" as resource doesn't match.
 permit (
     principal,
     action == MyApp::Action::"GetProjectMetadata",
     resource in MyApp::Server::"3"
 );
-// 4 - As expected: Not returned as "may be determining" as project 0 is not in project 1.
+// 4 - As expected: Not returned as "may be determining" as resource doesn't match.
 permit (
     principal,
     action == MyApp::Action::"GetProjectMetadata",
     resource in MyApp::Project::"4"
 );
-// 5 - Unexpected: Returned as "may be determining" although project 0 is not in project 2.
-// Especially unexpected as the much wider "wildcard" polciy above without restricted principal
+// 5 - Unexpected: Returned as "may be determining" although resource doesn't match.
+// Especially unexpected as the much wider polciy above without restricted principal
 // is not returned as "may be determining".
 permit (
     principal == MyApp::User::"5",
@@ -70,19 +70,10 @@ permit (
     action == MyApp::Action::"GetProjectMetadata",
     resource == MyApp::Project::"6"
 );
-// 7 - Unexpected: Returned as "may be determining", although action is a server action
-// and query is for a project action.
+// 7 - Unexpected: Returned as "may be determining", although action doesn't match.
 permit (
     principal == MyApp::User::"7",
     action in MyApp::Action::"ServerActions",
-    resource
-);
-// 8 - Unexpected: Returned as "may be determining", although action is a server action and does not apply to
-// projects
-// and query is for a project action.
-permit (
-    principal == MyApp::User::"8",
-    action in MyApp::Action::"ProjectActions",
     resource
 );
 "#;
