@@ -21,58 +21,53 @@ mod tests {
 
     use super::*;
 
-    // We will query these later for policies that are "may be determining" for the following request:
+    // We will query these policies with TPE with the following request:
     // principal: MyApp::User (no ID specified)
     // action: MyApp::Action::"GetProjectMetadata"
     // resource: MyApp::Project::"0"
     const SAMPLE_POLICIES: &str = r#"
-// 0 - As expected: Returned as "may be determining"
+// 0 - As expected: Returned by TPE
 permit (
     principal == MyApp::User::"0",
     action == MyApp::Action::"GetProjectMetadata",
     resource == MyApp::Project::"0"
 );
-// 1 - As expected: Returned as "may be determining"
+// 1 - As expected: Returned by TPE
 permit (
     principal == MyApp::User::"1",
     action,
     resource in MyApp::Server::"0"
 );
-// 2 - Not as expected: Is returned as "may be determining" although action doesn't match.
+// 2 - Not as expected: Is returned by TPE although action doesn't match.
 permit (
     principal == MyApp::User::"2",
     action == MyApp::Action::"DeleteProject",
     resource
 );
-// 3 - As expected: Not returned as "may be determining" as resource doesn't match.
+// 3 - Not as expected: Returned by TPE although resource doesn't match
+// Note that `partial_eval` does not mark this policy as "may be determining".
 permit (
     principal,
     action == MyApp::Action::"GetProjectMetadata",
     resource in MyApp::Server::"3"
 );
-// 4 - As expected: Not returned as "may be determining" as resource doesn't match.
+// 4 - Not as expected: Returned by TPE although resource doesn't match.
+// Note that `partial_eval` behaves inconsistently here and marks this policy as "may be determining" even
+// thoug the much wider policy #3 is not marked as such.
 permit (
-    principal,
+    principal == MyApp::User::"4",
     action == MyApp::Action::"GetProjectMetadata",
     resource in MyApp::Project::"4"
 );
-// 5 - Unexpected: Returned as "may be determining" although resource doesn't match.
-// Especially unexpected as the much wider polciy above without restricted principal
-// is not returned as "may be determining".
+// 5 - Not as expected: Returned by TPE although resource doesn't match.
 permit (
     principal == MyApp::User::"5",
     action == MyApp::Action::"GetProjectMetadata",
-    resource in MyApp::Project::"5"
+    resource == MyApp::Project::"5"
 );
-// 6 - Unexpected: Returned as "may be determining", although resource doesn't match.
+// 6 - Not as expected: Returned by TPE, although action doesn't match.
 permit (
     principal == MyApp::User::"6",
-    action == MyApp::Action::"GetProjectMetadata",
-    resource == MyApp::Project::"6"
-);
-// 7 - Unexpected: Returned as "may be determining", although action doesn't match.
-permit (
-    principal == MyApp::User::"7",
     action in MyApp::Action::"ServerActions",
     resource
 );
@@ -125,6 +120,44 @@ permit (
     }
 
     #[test]
+    fn test_tpe() {
+        let policies = cedar_policy::PolicySet::from_str(SAMPLE_POLICIES).unwrap();
+        let entities = Entities::from_json_str(SAMPLE_ENTITIES, Some(&CEDAR_SCHEMA)).unwrap();
+
+        let project_0_uid = EntityUid::from_str("MyApp::Project::\"0\"").unwrap();
+
+        let partial_request = PartialRequest::new(
+            PartialEntityUid::new("MyApp::User".parse::<EntityTypeName>().unwrap(), None),
+            EntityUid::from_str("MyApp::Action::\"GetProjectMetadata\"").unwrap(),
+            PartialEntityUid::from_concrete(project_0_uid.clone()),
+            None,
+            &CEDAR_SCHEMA,
+        )
+        .unwrap();
+
+        let partial_entities = PartialEntities::from_concrete(entities, &CEDAR_SCHEMA).unwrap();
+
+        let tpe_result = policies
+            .tpe(&partial_request, &partial_entities, &CEDAR_SCHEMA)
+            .unwrap();
+        let residual_policies = tpe_result
+            .residual_policies()
+            .map(|p| p.id().to_string())
+            .collect::<HashSet<_>>();
+
+        let expected_policies = HashSet::from(["policy0".to_string(), "policy1".to_string()]);
+
+        assert_eq!(
+            residual_policies,
+            expected_policies,
+            "\nReturned policies: {:?}\nExpected policies: {:?}",
+            residual_policies.iter().sorted().collect::<Vec<_>>(),
+            expected_policies.iter().sorted().collect::<Vec<_>>(),
+        )
+    }
+
+    // Partial evaluation does slightly better than TPE. Uncomment the following test to see the results.
+    #[test]
     fn test_partial_eval() {
         let policies = policies();
         let entities = Entities::from_json_str(SAMPLE_ENTITIES, Some(&CEDAR_SCHEMA)).unwrap();
@@ -146,14 +179,12 @@ permit (
         let definitly_errored = result
             .definitely_errored()
             .map(ToString::to_string)
-            .sorted()
             .collect::<HashSet<_>>();
         println!("Definitly errored policies: {:?}", definitly_errored);
 
         let returned_policies = result
             .may_be_determining()
             .map(|p| p.id().to_string())
-            .sorted()
             .collect::<HashSet<_>>();
         let expected_policies = HashSet::from(["policy0".to_string(), "policy1".to_string()]);
 
@@ -162,44 +193,6 @@ permit (
             expected_policies,
             "\nReturned policies: {:?}\nExpected policies: {:?}",
             returned_policies.iter().sorted().collect::<Vec<_>>(),
-            expected_policies.iter().sorted().collect::<Vec<_>>(),
-        )
-    }
-
-    #[test]
-    fn test_tpe() {
-        let policies = cedar_policy::PolicySet::from_str(SAMPLE_POLICIES).unwrap();
-        let entities = Entities::from_json_str(SAMPLE_ENTITIES, Some(&CEDAR_SCHEMA)).unwrap();
-
-        let project_0_uid = EntityUid::from_str("MyApp::Project::\"0\"").unwrap();
-
-        let partial_request = PartialRequest::new(
-            PartialEntityUid::new("MyApp::Role".parse::<EntityTypeName>().unwrap(), None),
-            EntityUid::from_str("MyApp::Action::\"GetProjectMetadata\"").unwrap(),
-            PartialEntityUid::from_concrete(project_0_uid.clone()),
-            None,
-            &CEDAR_SCHEMA,
-        )
-        .unwrap();
-
-        let partial_entities = PartialEntities::from_concrete(entities, &CEDAR_SCHEMA).unwrap();
-
-        let tpe_result = policies
-            .tpe(&partial_request, &partial_entities, &CEDAR_SCHEMA)
-            .unwrap();
-        let residual_policies = tpe_result
-            .residual_policies()
-            .map(|p| p.id().to_string())
-            .sorted()
-            .collect::<HashSet<_>>();
-
-        let expected_policies = HashSet::from(["policy0".to_string(), "policy1".to_string()]);
-
-        assert_eq!(
-            residual_policies,
-            expected_policies,
-            "\nReturned policies: {:?}\nExpected policies: {:?}",
-            residual_policies.iter().sorted().collect::<Vec<_>>(),
             expected_policies.iter().sorted().collect::<Vec<_>>(),
         )
     }
