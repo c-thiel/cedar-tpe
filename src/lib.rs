@@ -14,8 +14,8 @@ mod tests {
     use std::collections::HashSet;
 
     use cedar_policy::{
-        Authorizer, Decision, Entities, EntityTypeName, EntityUid, PolicySet, Request,
-        ValidationMode, Validator,
+        Authorizer, Decision, Entities, EntityTypeName, EntityUid, PartialEntities,
+        PartialEntityUid, PartialRequest, PolicySet, Request, ValidationMode, Validator,
     };
     use itertools::Itertools;
 
@@ -166,34 +166,41 @@ permit (
         )
     }
 
-    // #[test]
-    // fn test_tpe() {
-    //     let policies = cedar_policy::PolicySet::from_str(SAMPLE_POLICIES).unwrap();
-    //     let entities = Entities::from_json_str(SAMPLE_ENTITIES, Some(&CEDAR_SCHEMA)).unwrap();
+    #[test]
+    fn test_tpe() {
+        let policies = cedar_policy::PolicySet::from_str(SAMPLE_POLICIES).unwrap();
+        let entities = Entities::from_json_str(SAMPLE_ENTITIES, Some(&CEDAR_SCHEMA)).unwrap();
 
-    //     let project_0_uid = EntityUid::from_str("MyApp::Project::\"0\"").unwrap();
+        let project_0_uid = EntityUid::from_str("MyApp::Project::\"0\"").unwrap();
 
-    //     let partial_request = PartialRequest::new(
-    //         PartialEntityUid::new("MyApp::Role".parse::<EntityTypeName>().unwrap(), None),
-    //         EntityUid::from_str("MyApp::Action::\"GetProjectMetadata\"").unwrap(),
-    //         PartialEntityUid::from_concrete(project_0_uid.clone()),
-    //         None,
-    //         &CEDAR_SCHEMA,
-    //     )
-    //     .unwrap();
+        let partial_request = PartialRequest::new(
+            PartialEntityUid::new("MyApp::Role".parse::<EntityTypeName>().unwrap(), None),
+            EntityUid::from_str("MyApp::Action::\"GetProjectMetadata\"").unwrap(),
+            PartialEntityUid::from_concrete(project_0_uid.clone()),
+            None,
+            &CEDAR_SCHEMA,
+        )
+        .unwrap();
 
-    //     let partial_entities = PartialEntities::from_concrete(entities, &CEDAR_SCHEMA).unwrap();
+        let partial_entities = PartialEntities::from_concrete(entities, &CEDAR_SCHEMA).unwrap();
 
-    //     let tpe_result = policies
-    //         .tpe(&partial_request, &partial_entities, &CEDAR_SCHEMA)
-    //         .unwrap();
-    //     let residual_policies = tpe_result
-    //         .residual_policies()
-    //         .map(|p| p.id().to_string())
-    //         .sorted()
-    //         .collect::<HashSet<_>>();
+        let tpe_result = policies
+            .tpe(&partial_request, &partial_entities, &CEDAR_SCHEMA)
+            .unwrap();
+        let residual_policies = tpe_result
+            .residual_policies()
+            .map(|p| p.id().to_string())
+            .sorted()
+            .collect::<HashSet<_>>();
 
-    //     println!("Residual policies: {:?}", residual_policies);
-    //     assert_eq!(residual_policies, HashSet::from(["policy0".to_string()]));
-    // }
+        let expected_policies = HashSet::from(["policy0".to_string(), "policy1".to_string()]);
+
+        assert_eq!(
+            residual_policies,
+            expected_policies,
+            "\nReturned policies: {:?}\nExpected policies: {:?}",
+            residual_policies.iter().sorted().collect::<Vec<_>>(),
+            expected_policies.iter().sorted().collect::<Vec<_>>(),
+        )
+    }
 }
